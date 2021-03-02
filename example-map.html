@@ -1,0 +1,94 @@
+<html>
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.3.3/rxjs.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@atlanticapps/marco-client@2.0.0/dist/index.umd.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=KEYGOESHERE&callback=initMap"
+            async
+            defer></script>
+</head>
+
+<body>
+<div id="map" style="height:800px;width:800px;"></div>
+<script>
+    // An example map application using the NAP Traffic SDK
+    // Make sure to add your Google Maps API key to the maps script include in the header.
+    //
+    // The fields below can be customized to fit your needs.
+    // The deployment base-url should go in below.
+    var baseUrl = 'https://data.vd-nap.dk';
+    // Insert your NAP API key in this field
+    const apiKey = '[YOUR-API-KEY]';
+    // And populate the array below with the datatypes you wish to load.
+    // Supported types for the Traffic SDK: traffic, roadworks, wintercondition, winterdeicing
+    var types = ['traffic'];
+
+    // The query parameters for our endpoints
+    const search = 'api_key=' + apiKey + '&types=' + types.join(',')
+
+    // Google Maps Callback
+    function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+            center: {lat: 55.906320, lng: 10.994602},
+            zoom: 7
+        });
+        // We'll use an event-source backend here to use SSE based retrieval.
+        const client = new marco.Client(new marco.EventSourceBackend());
+
+        // Make sure to use the Google Maps snapshot manager. This greatly improves performance on the map loading.
+        const manager = new GMapsDataLayerSnapshotManager(map, {
+            keySelector: (val) => val.properties.tag,
+            dataSelector: (it) => it['entity']
+        });
+
+        fetch(baseUrl + '/api/v2/map/snapshot?renderer=geojson&api_key=' + search)
+            .then((response) => response.json())
+            .then((data) => {
+                manager.setInitialValue(data);
+                const session = client.listen(baseUrl + '/api/v2/map/updates?renderer=geojson&' + search, {manager: manager});
+                session.subscribe();
+            });
+    }
+
+
+    // This is a custom snapshot manager for RTClient. It stores the current state directly in a Google Maps layer.
+    class GMapsDataLayerSnapshotManager extends marco.SnapshotManager {
+        constructor(map, options) {
+            super(options);
+            this.map = map;
+            this.layer = new google.maps.Data({map: map});
+        }
+
+        setInitialValue(value) {
+            this.clear();
+            this.addValues(value);
+        }
+
+        onConnect(observer) {
+            return new rxjs.Observable(() => {
+                // Intentionally empty
+            }).subscribe(observer);
+        }
+
+        clear() {
+            this.layer.setMap(null);
+            this.layer = new google.maps.Data({map: this.map});
+        }
+
+        addValues(values) {
+            const collection = {type: 'FeatureCollection', features: values};
+            this.layer.addGeoJson(collection, {});
+        }
+
+        removeKeys(keys) {
+            this.layer.forEach((it) => {
+                if (keys.some((k) => k === it.getProperty('tag'))) {
+                    this.data.remove(it);
+                }
+            });
+        }
+    }
+</script>
+</body>
+
+</html>
+

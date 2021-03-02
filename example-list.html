@@ -1,0 +1,51 @@
+<html>
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.3.3/rxjs.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@atlanticapps/marco-client@2.0.0/dist/index.umd.js"></script>
+</head>
+
+<body>
+<ul id="list">
+</ul>
+<script>
+    // This is an example real-time event list using the NAP Traffic SDK.
+    // Customize the fields below to suit your needs.
+    const baseUrl = 'https://data.vd-nap.dk';
+    // Add your NAP API key below.
+    const apiKey = '[YOUR-API-KEY]';
+    // And populate the array below with the datatypes you wish to load.
+    // Supported types for the Traffic SDK: traffic, roadworks, wintercondition, winterdeicing
+    const types = ['traffic'];
+
+    const client = new marco.Client(new marco.EventSourceBackend());
+
+
+    // The query parameters for our endpoints
+    const search = 'api_key=' + apiKey + '&types=' + types.join(',')
+
+    const snapshotPromise = fetch(baseUrl + '/api/v2/list/snapshot?' + search).then((response) => response.json())
+    const session = client.listen(baseUrl + '/api/v2/list/updates?' + search, {initialValueSupplier: rxjs.from(snapshotPromise)});
+    session.subscribe((data) => {
+        const list = document.querySelector('#list');
+        for (var element of data) {
+            list.appendChild(buildListItem(element.heading, element.description));
+        }
+    });
+
+    // Just a simple function to build our list items.
+    function buildListItem(headerContent, bodyContent) {
+        var item = document.createElement('li');
+        var header = document.createElement('h5');
+        header.innerHTML = headerContent;
+        header.style.marginBottom = '0';
+        var body = document.createElement('p');
+        body.innerHTML = bodyContent;
+        body.style.marginTop = '0';
+        item.appendChild(header);
+        item.appendChild(body);
+        return item;
+    }
+</script>
+</body>
+
+</html>
